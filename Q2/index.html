@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Stock Analytics</title>
+</head>
+<body>
+  <div id="root"></div>
+  <script defer src="https://cdn.jsdelivr.net/npm/react@18.2.0/umd/react.development.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/react-dom@18.2.0/umd/react-dom.development.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/@mui/material@5.14.18/umd/material-ui.development.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/axios@1.6.2/dist/axios.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/@babel/standalone@7.23.4/babel.min.js"></script>
+  <script type="text/babel">
+    const { React, ReactDOM } = window;
+    const { Container, Typography, Grid, Select, MenuItem, FormControl, InputLabel, Card, CardContent } = window.MaterialUI;
+    const Chart = window.Chart;
+    const axios = window.axios;
+
+    // API Service
+    const apiService = {
+      getStockPrices: async (symbol, minutes) => {
+        try {
+          const response = await axios.get(`/api/stocks/${symbol}/prices?m=${minutes}`);
+          return response.data;
+        } catch (error) {
+          console.error('Error fetching stock prices:', error);
+          return { prices: [], average: 0 };
+        }
+      },
+    };
+
+    // Stock Page Component
+    function StockPage() {
+      const [timeFrame, setTimeFrame] = React.useState(30);
+      const [stockData, setStockData] = React.useState({ prices: [], average: 0 });
+      const [symbol, setSymbol] = React.useState('AAPL');
+      const chartRef = React.useRef(null);
+      const chartInstanceRef = React.useRef(null);
+
+      React.useEffect(() => {
+        const fetchData = async () => {
+          const data = await apiService.getStockPrices(symbol, timeFrame);
+          setStockData(data);
+        };
+        fetchData();
+      }, [symbol, timeFrame]);
+
+      React.useEffect(() => {
+        if (chartRef.current && stockData.prices.length > 0) {
+          // Destroy previous chart instance if it exists
+          if (chartInstanceRef.current) {
+            chartInstanceRef.current.destroy();
+          }
+
+          const ctx = chartRef.current.getContext('2d');
+          chartInstanceRef.current = new Chart(ctx, {
+            type: 'line',
+            data: {
+              labels: stockData.prices.map((d) => new Date(d.timestamp).toLocaleTimeString()),
+              datasets: [
+                {
+                  label: `${symbol} Price`,
+                  data: stockData.prices.map((d) => d.price),
+                  borderColor: '#1976d2',
+                  fill: false,
+                },
+                {
+                  label: 'Average Price',
+                  data: stockData.prices.map(() => stockData.average),
+                  borderColor: '#d81b60',
+                  borderDash: [5, 5],
+                  fill: false,
+                },
+              ],
+            },
+            options: {
+              plugins: {
+                tooltip: {
+                  callbacks: {
+                    label: (context) => `${context.dataset.label}: $${context.parsed.y.toFixed(2)}`,
+                  },
+                },
+              },
+              scales: {
+                x: { title: { display: true, text: 'Time' } },
+                y: { title: { display: true, text: 'Price ($)' } },
+              },
+            },
+          });
+        }
+
+        // Cleanup on unmount
+        return () => {
+          if (chartInstanceRef.current) {
+            chartInstanceRef.current.destroy();
+          }
+        };
+      }, [stockData, symbol]);
+
+      return (
+        <Container maxWidth="lg" sx={{ py: 4 }}>
+          <Typography variant="h4" gutterBottom>Stock Price Analysis</Typography>
+          <Grid container spacing={2} alignItems="center">
+            <Grid item xs={12} sm={6}>
+              <FormControl fullWidth>
+                <InputLabel>Stock Symbol</InputLabel>
+                <Select value={symbol} onChange={(e) => setSymbol(e.target.value)}>
+                  <MenuItem value="AAPL">AAPL</MenuItem>
+                  <MenuItem value="GOOGL">GOOGL</MenuItem>
+                  <MenuItem value="MSFT">MSFT</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <FormControl fullWidth>
+                <InputLabel>Time Frame (minutes)</InputLabel>
+                <Select value={timeFrame} onChange={(e) => setTimeFrame(e.target.value)}>
+                  <MenuItem value={5}>5</MenuItem>
+                  <MenuItem value={15}>15</MenuItem>
+                  <MenuItem value={30}>30</MenuItem>
+                  <MenuItem value={60}>60</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+          </Grid>
+          <Card sx={{ mt: 4 }}>
+            <CardContent>
+              <canvas ref={chartRef}></canvas>
+            </CardContent>
+          </Card>
+        </Container>
+      );
+    }
+
+    // Main App Component
+    function App() {
+      return (
+        <div>
+          <StockPage />
+        </div>
+      );
+    }
+
+    // Render the app
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
